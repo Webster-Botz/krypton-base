@@ -30,6 +30,7 @@
       "@whiskeysockets/baileys": "^6.4.0",
       "api": "^5.0.8",
       "axios": "^1.4.0",
+      "better-sqlite3": "^7.4.6",
       "better-tord": "^1.3.7",
       "bing-translate-api": "^2.9.0",
       "bluebird": "^3.7.2",
