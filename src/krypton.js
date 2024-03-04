@@ -42,7 +42,7 @@ const start = async () => {
     client.mods = (process.env.MODS || '').split(',')
 
     //Database
-    client.DB = new QuickD()
+    client.DB = new QuickDB()
     //Tables
     client.contactDB = client.DB.table('contacts')
 
