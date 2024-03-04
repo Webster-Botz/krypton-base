@@ -75,15 +75,15 @@ const antilink = async (client, M, groupAdmins, ActivateMod, isGroup, sender, bo
         groupAdmins.includes(client.user.id.split(':')[0] + '@s.whatsapp.net') &&
         body
     ) {
-        const groupCodeRegex = body.match(/chat.whatsapp.com\/(?:invite\/)?([\w\d]*)/)
+        const groupCodeRegex = body.match(/(https?:\/\/)?chat\.whatsapp\.com\/(?:invite\/)?([\w\d]*)/)
         if (groupCodeRegex && groupCodeRegex.length === 2 && !groupAdmins.includes(sender)) {
             const groupCode = groupCodeRegex[1]
             const groupNow = await client.groupInviteCode(from)
 
             if (groupCode !== groupNow) {
                 await client.sendMessage(from, { delete: M.key })
-                return await client.groupParticipantsUpdate(from, [sender], 'remove')
-                M.reply('Successfully removed an intruder!!!!')
+                //return await client.groupParticipantsUpdate(from, [sender], 'remove')
+                M.reply('Successfully deleted link!!!!')
             }
         }
     }
