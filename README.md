@@ -28,7 +28,7 @@
 ---
 
 <p align="center">
-  <a href="https://github.com/Debanjan-San/krypton-WhatsappBot"><b>whatsapp-bot</b></a> out-of-the-box support on...
+  <a href="https://github.com/Webster-Botz/krypton-base"><b>whatsapp-bot</b></a> out-of-the-box support on...
 </p>
 
 <p align="center">
