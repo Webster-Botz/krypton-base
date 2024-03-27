@@ -1,13 +1,15 @@
 const axios = require('axios').default
 const { tmpdir } = require('os')
 const { promisify } = require('util')
+const exec = promisify(require('child_process').exec)
 const linkify = require('linkifyjs')
 const FormData = require('form-data')
+const PDFDocument = require('pdfkit')
+const { uploadByBuffer } = require('telegraph-uploader')
 const { load } = require('cheerio')
-const { exec } = require('child_process')
 const { createCanvas } = require('canvas')
 const { sizeFormatter } = require('human-readable')
-const { readFile, unlink, writeFile } = require('fs-extra')
+const { createWriteStream, readFile, unlink, writeFile } = require('fs-extra')
 const { removeBackgroundFromImageBase64 } = require('remove.bg')
 
 /**
@@ -120,6 +122,13 @@ const extractUrls = (content) => linkify.find(content).map((url) => url.value)
 const fetch = async (url) => (await axios.get(url)).data
 
 /**
+ * @param {Buffer} buffer
+ * @returns {string} url
+ */
+
+const bufferToUrl = async (buffer) => (await uploadByBuffer(buffer)).link
+
+/**
  * @param {Buffer} webp
  * @returns {Promise<Buffer>}
  */
@@ -127,9 +136,18 @@ const fetch = async (url) => (await axios.get(url)).data
 const webpToPng = async (webp) => {
     const filename = `${tmpdir()}/${Math.random().toString(36)}`
     await writeFile(`${filename}.webp`, webp)
-    await execute(`dwebp "${filename}.webp" -o "${filename}.png"`)
+    await exec(`dwebp "${filename}.webp" -o "${filename}.png"`)
     const buffer = await readFile(`${filename}.png`)
     Promise.all([unlink(`${filename}.png`), unlink(`${filename}.webp`)])
+    return buffer
+}
+
+const mp3ToOpus = async (mp3) => {
+    const filename = `${tmpdir()}/${Math.random().toString(36)}`
+    await writeFile(`${filename}.mp3`, mp3)
+    await exec(`ffmpeg -i ${filename}.mp3 -c:a libopus ${filename}.opus`)
+    const buffer = await readFile(`${filename}.opus`)
+    Promise.all([unlink(`${filename}.mp3`), unlink(`${filename}.opus`)])
     return buffer
 }
 
@@ -141,7 +159,9 @@ const webpToPng = async (webp) => {
 const webpToMp4 = async (webp) => {
     const responseFile = async (form, buffer = '') => {
         return axios.post(buffer ? `https://ezgif.com/webp-to-mp4/${buffer}` : 'https://ezgif.com/webp-to-mp4', form, {
-            headers: { 'Content-Type': `multipart/form-data; boundary=${form._boundary}` }
+            headers: {
+                'Content-Type': `multipart/form-data; boundary=${form._boundary}`
+            }
         })
     }
     return new Promise(async (resolve, reject) => {
@@ -178,7 +198,7 @@ const webpToMp4 = async (webp) => {
 const gifToMp4 = async (gif, write = false) => {
     const filename = `${tmpdir()}/${Math.random().toString(36)}`
     await writeFile(`${filename}.gif`, gif)
-    await execute(
+    await exec(
         `ffmpeg -f gif -i ${filename}.gif -movflags faststart -pix_fmt yuv420p -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" ${filename}.mp4`
     )
     if (write) return `${filename}.mp4`
@@ -187,11 +207,20 @@ const gifToMp4 = async (gif, write = false) => {
     return buffer
 }
 
-const execute = promisify(exec)
-
 const getRandomItem = (array) => array[Math.floor(Math.random() * array.length)]
 
 const calculatePing = (timestamp, now) => (now - timestamp) / 1000
+
+const convertMs = (ms, to = 'seconds') => {
+    const conversions = {
+        days: 1000 * 60 * 60 * 24,
+        hours: 1000 * 60 * 60,
+        minutes: 1000 * 60,
+        seconds: 1000
+    }
+    const result = Math.floor(ms / conversions[to])
+    return result
+}
 
 const formatSize = sizeFormatter({
     std: 'JEDEC',
@@ -218,7 +247,7 @@ const term = (param) =>
     })
 
 const restart = () => {
-    exec('pm2 start src/krypton.js', (err, stdout, stderr) => {
+    exec('pm2 start src/binx.js', (err, stdout, stderr) => {
         if (err) {
             console.log(err)
             return
@@ -228,15 +257,61 @@ const restart = () => {
     })
 }
 
+const imagesToPDF = async (imageUrls) => {
+    const pdf = new PDFDocument({ autoFirstPage: false })
+    let filename = `${tmpdir()}/${Math.random().toString(36)}.pdf`
+    const stream = createWriteStream(filename)
+    pdf.pipe(stream)
+    for (const image of imageUrls) {
+        const data = typeof image === 'string' ? await getBuffer(image) : image
+        const img = pdf.openImage(data)
+        pdf.addPage({ size: [img.width, img.height] })
+        pdf.image(img, 0, 0)
+    }
+    pdf.end()
+    await new Promise((resolve, reject) => {
+        stream.on('finish', () => resolve(filename))
+        stream.on('error', reject)
+    })
+    const buffer = await readFile(filename)
+    await unlink(filename)
+    return buffer
+}
+
+const ocrImage = async (image) => {
+    try {
+        const form = new FormData()
+        form.append('image', image, { filename: 'blob' })
+        const res = (
+            await axios.post(
+                'https://oaucsc.treasureuvietobore.com/api/ocr-convert/98ccb3cd-09a8-4353-9edb-158dcc1f24d0',
+                form
+            )
+        ).data
+        if (res?.data?.text) {
+            return `Text on Image: ${res.data.text}`
+        } else if (res?.interpretation) {
+            return `Image Interpretation: ${res.interpretation}`
+        }
+    } catch (err) {
+        console.log(err.message)
+        return { error: 'Failed' }
+    }
+}
+
 module.exports = {
     calculatePing,
+    imagesToPDF,
     capitalize,
-    execute,
+    exec,
+    ocrImage,
     extractNumbers,
     fetch,
     formatSize,
+    convertMs,
     removeBG,
     extractUrls,
+    bufferToUrl,
     generateCreditCardImage,
     generateRandomHex,
     getBuffer,
@@ -245,5 +320,6 @@ module.exports = {
     restart,
     term,
     webpToMp4,
-    webpToPng
+    webpToPng,
+    mp3ToOpus
 }
